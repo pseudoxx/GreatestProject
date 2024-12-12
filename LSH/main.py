@@ -36,12 +36,15 @@ def shingle_text(df):
             for j in range(len(word_list)):
                 shingles.loc[i, word_list[j]] = True
             bar()
-    shingles.fillna(False, inplace=True)
+    with pd.option_context("future.no_silent_downcasting", True):
+        shingles = shingles.fillna(False).infer_objects(copy=False)
     return shingles
 
 shingles = shingle_text(df)
 shingles.set_index('ID', inplace=True)
 shingles = shingles.transpose()
 # shingles.to_csv('LSH/shingles.csv')
+# uncomment the following line to see a sample of the shingles
+# print(shingles.head())
 
 
