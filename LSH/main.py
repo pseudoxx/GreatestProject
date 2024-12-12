@@ -23,7 +23,7 @@ def shingle_text(df):
     vectorizer = CountVectorizer()
     # create the vocabulary and dataframe to store the shingles
     X = vectorizer.fit_transform(df['text'])
-    shingles = pd.DataFrame(columns=["ID"])
+    shingles = pd.DataFrame(columns=['ID'])
     shingles['ID'] = df['ID']
     # reformat the dataframe to have the shingles as columns
     shingles = pd.concat([shingles, pd.DataFrame(columns=vectorizer.get_feature_names_out())], axis=1)
@@ -40,6 +40,8 @@ def shingle_text(df):
     return shingles
 
 shingles = shingle_text(df)
-
+shingles.set_index('ID', inplace=True)
+shingles = shingles.transpose()
+shingles.to_csv('LSH/shingles.csv')
 
 
