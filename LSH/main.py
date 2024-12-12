@@ -42,6 +42,6 @@ def shingle_text(df):
 shingles = shingle_text(df)
 shingles.set_index('ID', inplace=True)
 shingles = shingles.transpose()
-shingles.to_csv('LSH/shingles.csv')
+# shingles.to_csv('LSH/shingles.csv')
 
 
