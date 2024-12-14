@@ -1,4 +1,0 @@
-alive_progress==3.2.0
-numpy==2.2.0
-pandas==2.2.3
-scikit_learn==1.6.0

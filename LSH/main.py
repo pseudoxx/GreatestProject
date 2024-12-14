@@ -1,103 +1,94 @@
 import pandas as pd
 import numpy as np
-import math
 from alive_progress import alive_bar
 from sklearn.feature_extraction.text import CountVectorizer
 from collections import defaultdict
 import itertools
+import time
 
-t1 = sys.time()
+t0 = time.time()
 
-N = 100 # number of text, should be 10000 when in production
-bands1 = 5
+N = 10000 # number of text, should be 10000 when in production
 rows1 = 8
-bands2 = 5
-rows2 = 15
-K = bands1 * rows1 * bands2 * rows2 # number of hash functions
+bands = 28
+rows2 = 10
+K = bands * rows1 * rows2 # number of hash functions
 
 # step 1: read data
 # read the data from the file so as to make it case-insensitive, space as the delimiter, and ignore punctuation
-with open("LSH/test_articles.txt", 'r') as f:
+with open("LSH/all_articles.txt", 'r') as f:
     data = f.readlines()
 df = pd.DataFrame(data, columns=['raw_data'])
 df[['ID', 'text']] = df['raw_data'].str.split(' ', n=1, expand=True)
 df = df.drop('raw_data', axis=1)
 df['text'] = df['text'].str[:-1]
-df['text'] = df.text.str.replace("``", "", regex=True).replace("\'\'", "", regex=True).replace(" --", "", regex=True).replace(", ", " ", regex=True).replace(r"\. ", " ", regex=True).replace("  ", " ", regex=True).replace("\"", "", regex=True).replace("?","").replace("!","")
-df['text'] = df['text'].str.lower()
+df['text'] = df.text.str.replace(r"\`\`|\'\'|\s\-\-|\"|\?|\!", "", regex=True).replace(r"\.\s|\,\s|\s+", " ", regex=True)
+df['text'] = df['text'].str.lower().str.strip()
+df['ID'] = df['ID'].str.strip('t').astype(int)
 
 # data input test
+# df.to_csv('LSH/data.csv')
 # print(df.head())
 
-# step 2: shingle the text
-def shingle_text(df):
-    vectorizer = CountVectorizer()
-    # create the vocabulary and dataframe to store the shingles
-    X = vectorizer.fit_transform(df['text'])
-    shingles = pd.DataFrame(columns=['ID'])
-    shingles['ID'] = df['ID']
-    # reformat the dataframe to have the shingles as columns
-    shingles = pd.concat([shingles, pd.DataFrame(columns=vectorizer.get_feature_names_out())], axis=1)
-    # iterate through the data check if the word is in the shingle and set it to true
-    with alive_bar(len(df)) as bar:
-        for i in range(len(df)):
-            vectorizer = CountVectorizer()
-            X = vectorizer.fit_transform([df['text'][i]])
-            word_list = vectorizer.get_feature_names_out()
-            for j in range(len(word_list)):
-                shingles.loc[i, word_list[j]] = True
-            bar()
-    with pd.option_context("future.no_silent_downcasting", True):
-        shingles = shingles.fillna(False).infer_objects(copy=False)
-    return shingles
+t1 = time.time()
+print("Step 1 time taken: ", t1 - t0)
 
-shingles = shingle_text(df)
-shingles.set_index('ID', inplace=True)
-shingles = shingles.transpose()
+# step 2: shingle the text
+vectorizer = CountVectorizer()
+X = vectorizer.fit_transform(df['text'])
+shingles = pd.DataFrame(columns=df['ID'], data=X.toarray().transpose())
+shingles = shingles.astype(bool, copy=False)
+
 # shingles.to_csv('LSH/shingles.csv')
 # uncomment the following line to see a sample of the shingles
 # print(shingles.head())
 
+t2 = time.time()
+print("Step 2 time taken: ", t2 - t1, t2 - t0)
+
 # step 3: use random vectors to hash the shingles
+
+shingles = shingles.sample(frac=1).reset_index(drop=True)
+
 np.random.seed(0)
 random_vectors = np.random.randn(K, len(shingles))
-signatures = pd.DataFrame(columns=shingles.columns)
-for i in range(K):
-    signatures.loc[i] = np.dot(random_vectors[i], shingles) >= 0
-
+signatures = pd.DataFrame(np.dot(random_vectors, shingles) >= 0, columns=shingles.columns)
 
 # signatures.to_csv('LSH/signatures.csv')
 # uncomment the following line to see a sample of the signatrues
 # print(signatures.head())
 
+t3 = time.time()
+print("Step 3 time taken: ", t3 - t2, t3 - t0)
+
 # step 4: use LSH to find the documents with a cosine similarity of at least 0.8
-p_min = 1 - np.acos(0.8) / math.pi
+# the corrensponding p_min here is:
+# p_min = 1 - np.acos(0.8) / math.pi
 
 # round 4-1: use rows1 to do an AND operation and build a new family F1
-F1 = pd.DataFrame(columns=signatures.columns)
-for i in range(int(K/rows1)):
-    hash_values = np.zeros(N, dtype=np.int32)
-    for b in range(i*rows1, (i+1)*rows1):
-        for j in range(N):
-            # print(b, j)
-            hash_values[j] = (hash_values[j] << 1) | int(signatures.iloc[b, j])
-    F1.loc[i] = hash_values
-
+f1_count = int(K / rows1)
+F1 = pd.DataFrame(columns=signatures.columns, index=range(f1_count))
+hash_matrix = signatures.values
+reshaped_matrix = hash_matrix.reshape(f1_count, rows1, N)
+# WARNING: 8 should be a factor of rows1, otherwise np.packbits will not work
+hash_values = np.packbits(reshaped_matrix, axis=1, bitorder='big').squeeze(axis=1).reshape(-1, F1.shape[1])
+F1.iloc[:f1_count, :] = hash_values
 # F1.to_csv('LSH/F1.csv')
 # uncomment the following line to see a sample of F1
 # print(F1.head())
+
+t4_1 = time.time()
+print("Step 4-1 time taken: ", t4_1 - t3, t4_1 - t0)
 
 # shuffle F1
 F1 = F1.sample(frac=1).reset_index(drop=True)
 # print(F1.head())
 
-# round 4-2: use bands1 and bands2 and row2 to do an OR-OR-AND operation
+# round 4-2: use bands and row2 to do an OR-OR-AND operation
 candidate_pairs = set(itertools.combinations(F1.columns, 2))
-print(candidate_pairs)
-print(len(candidate_pairs))
 for i in range(rows2):
     temp_pairs = set()
-    for b in range(i*bands1*bands2, (i+1)*bands1*bands2):
+    for b in range(i*bands, (i+1)*bands):
         array = F1.iloc[b]
         value_dict = defaultdict(list)
         for column, value in array.items():
@@ -107,7 +98,11 @@ for i in range(rows2):
                 temp_list = list(itertools.combinations(value, 2))
                 for pair in temp_list:
                     temp_pairs.add(pair)
-    candidate_pairs = candidate_pairs.intersection(temp_pairs)
-    print()
-    print(candidate_pairs)
-    print(len(candidate_pairs))
+    candidate_pairs.intersection_update(temp_pairs)
+
+
+print(candidate_pairs)
+print(len(candidate_pairs))
+
+t4_2 = time.time()
+print("Step 4-2 time taken: ", t4_2 - t4_1, t4_2 - t0)
