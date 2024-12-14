@@ -6,11 +6,13 @@ from sklearn.feature_extraction.text import CountVectorizer
 from collections import defaultdict
 import itertools
 
+t1 = sys.time()
+
 N = 100 # number of text, should be 10000 when in production
-bands1 = 2
-rows1 = 4
-bands2 = 4
-rows2 = 4
+bands1 = 5
+rows1 = 8
+bands2 = 5
+rows2 = 15
 K = bands1 * rows1 * bands2 * rows2 # number of hash functions
 
 # step 1: read data
