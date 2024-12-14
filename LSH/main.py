@@ -3,6 +3,8 @@ import numpy as np
 import math
 from alive_progress import alive_bar
 from sklearn.feature_extraction.text import CountVectorizer
+from collections import defaultdict
+import itertools
 
 N = 100 # number of text, should be 10000 when in production
 bands1 = 2
@@ -74,7 +76,7 @@ F1 = pd.DataFrame(columns=signatures.columns)
 for i in range(int(K/rows1)):
     hash_values = np.zeros(N, dtype=np.int32)
     for b in range(i*rows1, (i+1)*rows1):
-        for j in range(0, N):
+        for j in range(N):
             # print(b, j)
             hash_values[j] = (hash_values[j] << 1) | int(signatures.iloc[b, j])
     F1.loc[i] = hash_values
@@ -82,3 +84,28 @@ for i in range(int(K/rows1)):
 # F1.to_csv('LSH/F1.csv')
 # uncomment the following line to see a sample of F1
 # print(F1.head())
+
+# shuffle F1
+F1 = F1.sample(frac=1).reset_index(drop=True)
+# print(F1.head())
+
+# round 4-2: use bands1 and bands2 and row2 to do an OR-OR-AND operation
+candidate_pairs = set(itertools.combinations(F1.columns, 2))
+print(candidate_pairs)
+print(len(candidate_pairs))
+for i in range(rows2):
+    temp_pairs = set()
+    for b in range(i*bands1*bands2, (i+1)*bands1*bands2):
+        array = F1.iloc[b]
+        value_dict = defaultdict(list)
+        for column, value in array.items():
+            value_dict[value].append(column)
+        for key, value in value_dict.items():
+            if len(value) > 1:
+                temp_list = list(itertools.combinations(value, 2))
+                for pair in temp_list:
+                    temp_pairs.add(pair)
+    candidate_pairs = candidate_pairs.intersection(temp_pairs)
+    print()
+    print(candidate_pairs)
+    print(len(candidate_pairs))
