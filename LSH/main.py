@@ -1,10 +1,9 @@
 import pandas as pd
 import numpy as np
-from alive_progress import alive_bar
 from sklearn.feature_extraction.text import CountVectorizer
-from collections import defaultdict
-import itertools
 import time
+from scipy.sparse import csc_matrix
+from numba import njit
 
 t0 = time.time()
 
@@ -51,8 +50,10 @@ print("Step 2 time taken: ", t2 - t1, t2 - t0)
 shingles = shingles.sample(frac=1).reset_index(drop=True)
 
 np.random.seed(0)
-random_vectors = np.random.randn(K, len(shingles))
-signatures = pd.DataFrame(np.dot(random_vectors, shingles) >= 0, columns=shingles.columns)
+# faster random number generation with rng
+rng = np.random.default_rng(0)
+random_vectors = rng.normal(size=(K, len(shingles)))
+signatures = pd.DataFrame((random_vectors @ csc_matrix(shingles)) > 0, columns=shingles.columns)
 
 # signatures.to_csv('LSH/signatures.csv')
 # uncomment the following line to see a sample of the signatrues
@@ -85,22 +86,39 @@ F1 = F1.sample(frac=1).reset_index(drop=True)
 # print(F1.head())
 
 # round 4-2: use bands and row2 to do an OR-OR-AND operation
-candidate_pairs = set(itertools.combinations(F1.columns, 2))
+
+F1_values = F1.values
+columns = F1.columns.to_numpy()
+
+@njit
+def get_combination_pairs(cols):
+    n = len(cols)
+    result = []
+    for i in range(n):
+        for j in range(i + 1, n):
+            x = min(cols[i], cols[j]) - 1
+            y = max(cols[i], cols[j]) - 1
+            pair_value = x * 10000 + y
+            result.append(pair_value)
+    return result
+
 for i in range(rows2):
     temp_pairs = set()
-    for b in range(i*bands, (i+1)*bands):
-        array = F1.iloc[b]
-        value_dict = defaultdict(list)
-        for column, value in array.items():
-            value_dict[value].append(column)
-        for key, value in value_dict.items():
-            if len(value) > 1:
-                temp_list = list(itertools.combinations(value, 2))
-                for pair in temp_list:
-                    temp_pairs.add(pair)
-    candidate_pairs.intersection_update(temp_pairs)
-
-
+    start = i * bands
+    end = (i + 1) * bands
+    for b in range(start, end):
+        row = F1_values[b]
+        _, indices = np.unique(row, return_inverse=True)
+        for val_index in np.unique(indices):
+            cols_with_same_value = np.where(indices == val_index)[0]
+            if len(cols_with_same_value) > 1:
+                cols = columns[cols_with_same_value]
+                temp_pairs.update(get_combination_pairs(cols))
+    if i == 0:
+        candidate_pairs = temp_pairs
+    else: 
+        candidate_pairs.intersection_update(temp_pairs)
+        
 print(candidate_pairs)
 print(len(candidate_pairs))
 
