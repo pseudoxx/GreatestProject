@@ -48,12 +48,14 @@ df = df.drop(columns=['index'])
 df['row1*band*row2'] = df['row1'] * df['band'] * df['row2']
 df = df.sort_values(by='distance')
 # drop distances smaller than 0.02
-df = df[(df['distance'] > 0.02) & (df['distance'] < 0.12)]
-df = df[(df['value'] > 0.9) & (df['value'] < 0.98)]
+df = df[(df['distance'] > 0.02) & (df['distance'] < 0.18)]
+df = df[(df['value'] > 0.9) & (df['value'] < 0.99)]
 df = df.head(3000)
 
 # sort the dataframe by row1*band*row2 in ascending order
 df['ratio'] = df['row1*band*row2'] / (df['distance'] * df['value'])
-df = df.sort_values(by='row1*band*row2')
+df = df.sort_values(by='value', ascending=False)
+# only select lines with row1=8
+df = df[df['row1'] == 8]
 print(df.head())
 df.to_csv('LSH/iteration.csv')

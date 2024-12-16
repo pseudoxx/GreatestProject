@@ -9,8 +9,8 @@ t0 = time.time()
 
 N = 10000 # number of text, should be 10000 when in production
 rows1 = 8
-bands = 35
-rows2 = 10
+bands = 37
+rows2 = 7
 K = bands * rows1 * rows2 # number of hash functions
 
 # step 1: read data
