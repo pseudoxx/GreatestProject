@@ -9,7 +9,7 @@ t0 = time.time()
 
 N = 10000 # number of text, should be 10000 when in production
 rows1 = 8
-bands = 28
+bands = 35
 rows2 = 10
 K = bands * rows1 * rows2 # number of hash functions
 
@@ -118,9 +118,39 @@ for i in range(rows2):
         candidate_pairs = temp_pairs
     else: 
         candidate_pairs.intersection_update(temp_pairs)
-        
-print(candidate_pairs)
-print(len(candidate_pairs))
 
 t4_2 = time.time()
 print("Step 4-2 time taken: ", t4_2 - t4_1, t4_2 - t0)
+
+# step 5: verify the candidate pairs and clean all the false positives
+
+# recover the actual candidate_pairs
+pairs = set((i // 10000 + 1, i % 10000 + 1) for i in candidate_pairs)
+mod_pairs = set()
+
+for i in pairs:
+    doc1 = shingles[i[0]].values
+    doc2 = shingles[i[1]].values
+    doc1_sparse = csc_matrix(doc1)
+    len1 = np.sqrt(doc1_sparse.multiply(doc1_sparse).sum(axis=1))
+    doc2_sparse = csc_matrix(doc2)
+    len2 = np.sqrt(doc2_sparse.multiply(doc2_sparse).sum(axis=1))
+    similarity = (doc1_sparse.multiply(doc2_sparse).sum(axis=1)).data / (len1 * len2)
+    # debug
+    # print(len1, len2, similarity, end="\n\n")
+    if similarity >= 0.8:
+        mod_pairs.add(i)
+        
+# print the result
+'''
+for i in mod_pairs:
+    print("t{} t{}".format(i[0], i[1]))
+print(len(mod_pairs))
+'''
+
+with open('result.txt', 'w') as f:
+    for i in mod_pairs:
+        f.write("t{} t{}\n".format(i[0], i[1]))
+
+t5 = time.time()
+print("Step 5 time taken: ", t5 - t4_2, t5 - t0)
