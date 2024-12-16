@@ -9,8 +9,8 @@ t0 = time.time()
 
 N = 10000 # number of text, should be 10000 when in production
 rows1 = 8
-bands = 37
-rows2 = 7
+bands = 28
+rows2 = 8
 K = bands * rows1 * rows2 # number of hash functions
 
 # step 1: read data
@@ -74,6 +74,8 @@ reshaped_matrix = hash_matrix.reshape(f1_count, rows1, N)
 # WARNING: 8 should be a factor of rows1, otherwise np.packbits will not work
 hash_values = np.packbits(reshaped_matrix, axis=1, bitorder='big').squeeze(axis=1).reshape(-1, F1.shape[1])
 F1.iloc[:f1_count, :] = hash_values
+
+
 # F1.to_csv('LSH/F1.csv')
 # uncomment the following line to see a sample of F1
 # print(F1.head())
@@ -122,6 +124,7 @@ for i in range(rows2):
 t4_2 = time.time()
 print("Step 4-2 time taken: ", t4_2 - t4_1, t4_2 - t0)
 
+print(len(candidate_pairs))
 # step 5: verify the candidate pairs and clean all the false positives
 
 # recover the actual candidate_pairs
