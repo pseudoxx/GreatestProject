@@ -8,9 +8,10 @@ from numba import njit
 t0 = time.time()
 
 N = 10000 # number of text, should be 10000 when in production
-rows1 = 8
-bands = 28
-rows2 = 8
+# optimized mode based on all_articles.txt; full performance mode is applicable to any dataset
+rows1 = 8 # full perf: 8, optimized: 8
+bands = 28 # full perf: 28, optimized: 5
+rows2 = 10 # full perf: 10, optimized: 5
 K = bands * rows1 * rows2 # number of hash functions
 
 # step 1: read data
@@ -52,8 +53,8 @@ shingles = shingles.sample(frac=1).reset_index(drop=True)
 np.random.seed(0)
 # faster random number generation with rng
 rng = np.random.default_rng(0)
-random_vectors = rng.normal(size=(K, len(shingles)))
-signatures = pd.DataFrame((random_vectors @ csc_matrix(shingles)) > 0, columns=shingles.columns)
+rv = rng.normal(size=(K, len(shingles)))
+signatures = pd.DataFrame((rv @ csc_matrix(shingles)) > 0, columns=shingles.columns)
 
 # signatures.to_csv('LSH/signatures.csv')
 # uncomment the following line to see a sample of the signatrues
@@ -69,10 +70,10 @@ print("Step 3 time taken: ", t3 - t2, t3 - t0)
 # round 4-1: use rows1 to do an AND operation and build a new family F1
 f1_count = int(K / rows1)
 F1 = pd.DataFrame(columns=signatures.columns, index=range(f1_count))
-hash_matrix = signatures.values
-reshaped_matrix = hash_matrix.reshape(f1_count, rows1, N)
+hash_sign = signatures.values
+reshape_sign = hash_sign.reshape(f1_count, rows1, N)
 # WARNING: 8 should be a factor of rows1, otherwise np.packbits will not work
-hash_values = np.packbits(reshaped_matrix, axis=1, bitorder='big').squeeze(axis=1).reshape(-1, F1.shape[1])
+hash_values = np.packbits(reshape_sign, axis=1, bitorder='big').squeeze(axis=1).reshape(-1, F1.shape[1])
 F1.iloc[:f1_count, :] = hash_values
 
 
@@ -93,15 +94,15 @@ F1_values = F1.values
 columns = F1.columns.to_numpy()
 
 @njit
-def get_combination_pairs(cols):
+def get_pairs(cols):
     n = len(cols)
     result = []
     for i in range(n):
         for j in range(i + 1, n):
             x = min(cols[i], cols[j]) - 1
             y = max(cols[i], cols[j]) - 1
-            pair_value = x * 10000 + y
-            result.append(pair_value)
+            pair = x * 10000 + y
+            result.append(pair)
     return result
 
 for i in range(rows2):
@@ -112,10 +113,10 @@ for i in range(rows2):
         row = F1_values[b]
         _, indices = np.unique(row, return_inverse=True)
         for val_index in np.unique(indices):
-            cols_with_same_value = np.where(indices == val_index)[0]
-            if len(cols_with_same_value) > 1:
-                cols = columns[cols_with_same_value]
-                temp_pairs.update(get_combination_pairs(cols))
+            cols_pile = np.where(indices == val_index)[0]
+            if len(cols_pile) > 1:
+                cols = columns[cols_pile]
+                temp_pairs.update(get_pairs(cols))
     if i == 0:
         candidate_pairs = temp_pairs
     else: 
